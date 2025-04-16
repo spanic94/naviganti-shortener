@@ -1,53 +1,39 @@
-from flask import Flask, redirect, request, jsonify
-import string
+from flask import Flask, request, jsonify
 import random
-import json
-import os
+import string
 
 app = Flask(__name__)
-DB_FILE = 'shortlinks.json'
 
-if os.path.exists(DB_FILE):
-    with open(DB_FILE, 'r') as f:
-        shortlinks = json.load(f)
-else:
-    shortlinks = {}
+# Dizionario per memorizzare gli shortlink
+shortlinks = {}
 
-def save_db():
-    with open(DB_FILE, 'w') as f:
-        json.dump(shortlinks, f)
+# Funzione per generare un codice shortlink casuale
+def generate_shortlink():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=5))
 
-def generate_code(length=5):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+@app.route('/create', methods=['GET'])
+def create_shortlink():
+    url = request.args.get('url')
+    
+    if not url:
+        return jsonify({"error": "Missing 'url' parameter"}), 400
 
-@app.route('/create')
-def create():
-    original_url = request.args.get('url')
-    if not original_url:
-        return "Parametro 'url' mancante", 400
+    # Genera un shortlink e lo memorizza
+    short_code = generate_shortlink()
+    shortlinks[short_code] = url
+    
+    # Restituisce il shortlink
+    return jsonify({"short_url": f"https://naviganti.wine/{short_code}"}), 200
 
-    for code, link in shortlinks.items():
-        if link == original_url:
-            return jsonify(short_url=f"https://naviganti.wine/{code}")
+@app.route('/<short_code>', methods=['GET'])
+def redirect_to_url(short_code):
+    url = shortlinks.get(short_code)
+    
+    if not url:
+        return jsonify({"error": "Shortlink not found"}), 404
 
-    code = generate_code()
-    while code in shortlinks:
-        code = generate_code()
-
-    shortlinks[code] = original_url
-    save_db()
-    return jsonify(short_url=f"https://naviganti.wine/{code}")
-
-@app.route('/<code>')
-def go(code):
-    target = shortlinks.get(code)
-    if target:
-        return redirect(target)
-    return "Link non trovato", 404
-
-@app.route('/')
-def home():
-    return "Benvenuto nel tuo URL shortener ✂️"
+    return jsonify({"url": url}), 302
 
 if __name__ == '__main__':
-    app.run()
+    # Aggiunto il parametro host='0.0.0.0' per Render
+    app.run(host="0.0.0.0", port=5000, debug=False)
